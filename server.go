@@ -71,6 +71,8 @@ type baseServer struct {
 
 	sessionHandler packetHandlerManager
 
+	receivedPackets chan *receivedPacket
+
 	// set as a member, so they can be set in the tests
 	newSession func(connection, sessionRunner, protocol.ConnectionID /* original connection ID */, protocol.ConnectionID /* client dest connection ID */, protocol.ConnectionID /* destination connection ID */, protocol.ConnectionID /* source connection ID */, [16]byte, *Config, *tls.Config, *handshake.TokenGenerator, bool /* enable 0-RTT */, utils.Logger, protocol.VersionNumber) quicSession
 
@@ -176,13 +178,33 @@ func listen(conn net.PacketConn, tlsConf *tls.Config, config *Config, acceptEarl
 		sessionHandler:      sessionHandler,
 		sessionQueue:        make(chan quicSession),
 		errorChan:           make(chan struct{}),
+		receivedPackets:     make(chan *receivedPacket, 1000),
 		newSession:          newSession,
 		logger:              utils.DefaultLogger.WithPrefix("server"),
 		acceptEarlySessions: acceptEarly,
 	}
+	go s.run()
 	sessionHandler.SetServer(s)
 	s.logger.Debugf("Listening for %s connections on %s", conn.LocalAddr().Network(), conn.LocalAddr().String())
 	return s, nil
+}
+
+func (s *baseServer) run() {
+	for {
+		select {
+		case <-s.errorChan:
+			return
+		default:
+		}
+		select {
+		case <-s.errorChan:
+			return
+		case p := <-s.receivedPackets:
+			if shouldReleaseBuffer := s.handlePacketImpl(p); !shouldReleaseBuffer {
+				p.buffer.Release()
+			}
+		}
+	}
 }
 
 var defaultAcceptToken = func(clientAddr net.Addr, token *Token) bool {
@@ -329,11 +351,7 @@ func (s *baseServer) Addr() net.Addr {
 }
 
 func (s *baseServer) handlePacket(p *receivedPacket) {
-	go func() {
-		if shouldReleaseBuffer := s.handlePacketImpl(p); !shouldReleaseBuffer {
-			p.buffer.Release()
-		}
-	}()
+	s.receivedPackets <- p
 }
 
 func (s *baseServer) handlePacketImpl(p *receivedPacket) bool /* was the packet passed on to a session */ {
