@@ -33,11 +33,10 @@ type unknownPacketHandler interface {
 }
 
 type packetHandlerManager interface {
+	sessionRunner
 	io.Closer
 	SetServer(unknownPacketHandler)
 	CloseServer()
-	sessionRunner
-	AddIfNotTaken(protocol.ConnectionID, packetHandler) bool
 }
 
 type quicSession interface {
@@ -478,10 +477,9 @@ func (s *baseServer) createNewSession(
 		s.logger,
 		version,
 	)
-	added := s.sessionHandler.AddIfNotTaken(clientDestConnID, sess)
-	// We're already keeping track of this connection ID.
-	// This might happen if we receive two copies of the Initial at the same time.
-	if !added {
+	if added := s.sessionHandler.Add(clientDestConnID, sess); !added {
+		// We're already keeping track of this connection ID.
+		// This might happen if we receive two copies of the Initial at the same time.
 		return nil
 	}
 	s.sessionHandler.Add(srcConnID, sess)
