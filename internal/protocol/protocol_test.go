@@ -12,6 +12,7 @@ var _ = Describe("Protocol", func() {
 			Expect(PacketTypeRetry.String()).To(Equal("Retry"))
 			Expect(PacketTypeHandshake.String()).To(Equal("Handshake"))
 			Expect(PacketType0RTT.String()).To(Equal("0-RTT Protected"))
+			Expect(PacketTypeVersionNegotiation.String()).To(Equal("Version Negotiation"))
 			Expect(PacketType(10).String()).To(Equal("unknown packet type: 10"))
 		})
 	})
