@@ -1,18 +1,11 @@
 package qlog
 
 import (
-	"encoding/json"
-	"fmt"
+	"github.com/francoispqt/gojay"
 
 	"github.com/lucas-clemente/quic-go/internal/protocol"
 	"github.com/lucas-clemente/quic-go/internal/wire"
 )
-
-type versionNumber protocol.VersionNumber
-
-func (v versionNumber) MarshalJSON() ([]byte, error) {
-	return escapeStr(fmt.Sprintf("%x", v)), nil
-}
 
 func transformHeader(hdr *wire.ExtendedHeader) *packetHeader {
 	return &packetHeader{
@@ -34,21 +27,25 @@ type packetHeader struct {
 	DestConnectionID protocol.ConnectionID  `json:"dcid,string,omitempty"`
 }
 
-func (h packetHeader) MarshalJSON() ([]byte, error) {
-	type Alias packetHeader
-	return json.Marshal(&struct {
-		SrcConnectionIDLen  int           `json:"scil,string,omitempty"`
-		SrcConnectionID     connectionID  `json:"scid,string,omitempty"`
-		DestConnectionIDLen int           `json:"dcil,string,omitempty"`
-		DestConnectionID    connectionID  `json:"dcid,string,omitempty"`
-		Version             versionNumber `json:"version,omitempty"`
-		Alias
-	}{
-		Alias:               (Alias)(h),
-		SrcConnectionIDLen:  h.SrcConnectionID.Len(),
-		SrcConnectionID:     connectionID(h.SrcConnectionID),
-		DestConnectionIDLen: h.DestConnectionID.Len(),
-		DestConnectionID:    connectionID(h.DestConnectionID),
-		Version:             versionNumber(h.Version),
-	})
+func (h packetHeader) MarshalJSONObject(enc *gojay.Encoder) {
+	enc.StringKey("packet_number", toString(int64(h.PacketNumber)))
+	if h.PacketSize != 0 {
+		enc.Int64Key("packet_size", int64(h.PacketSize))
+	}
+	if h.PayloadLength != 0 {
+		enc.Int64Key("payload_length", int64(h.PayloadLength))
+	}
+	if h.Version != 0 {
+		enc.StringKey("version", versionNumber(h.Version).String())
+	}
+	if h.SrcConnectionID.Len() > 0 {
+		enc.StringKey("scil", toString(int64(h.SrcConnectionID.Len())))
+		enc.StringKey("scid", connectionID(h.SrcConnectionID).String())
+	}
+	if h.DestConnectionID.Len() > 0 {
+		enc.StringKey("dcil", toString(int64(h.DestConnectionID.Len())))
+		enc.StringKey("dcid", connectionID(h.DestConnectionID).String())
+	}
 }
+
+func (packetHeader) IsNil() bool { return false }
